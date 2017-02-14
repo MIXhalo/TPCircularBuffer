@@ -153,7 +153,7 @@ static __inline__ __attribute__((always_inline)) void* TPCircularBufferTail(TPCi
 static __inline__ __attribute__((always_inline)) void TPCircularBufferConsume(TPCircularBuffer *buffer, int32_t amount) {
     buffer->tail = (buffer->tail + amount) % buffer->length;
     if ( buffer->atomic ) {
-        atomic_fetch_add(&buffer->fillCount, -amount);
+        atomic_fetch_sub_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
     } else {
         buffer->fillCount -= amount;
     }
@@ -193,7 +193,7 @@ static __inline__ __attribute__((always_inline)) void* TPCircularBufferHead(TPCi
 static __inline__ __attribute__((always_inline)) void TPCircularBufferProduce(TPCircularBuffer *buffer, int32_t amount) {
     buffer->head = (buffer->head + amount) % buffer->length;
     if ( buffer->atomic ) {
-        atomic_fetch_add(&buffer->fillCount, amount);
+        atomic_fetch_add_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
     } else {
         buffer->fillCount += amount;
     }
