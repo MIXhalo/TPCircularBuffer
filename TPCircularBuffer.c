@@ -123,7 +123,7 @@ bool _TPCircularBufferInit(TPCircularBuffer *buffer, int32_t length, size_t stru
         }
         
         buffer->buffer = (void*)bufferAddress;
-        buffer->fillCount = 0;
+        atomic_store_explicit(&buffer->fillCount, 0, memory_order_release);
         buffer->head = buffer->tail = 0;
         buffer->atomic = true;
         
