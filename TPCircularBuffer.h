@@ -64,7 +64,7 @@ typedef struct {
     int32_t           length;
     int32_t           tail;
     int32_t           head;
-    volatile atomic_int fillCount;
+    atomic_int fillCount;
     bool              atomic;
 } TPCircularBuffer;
 
