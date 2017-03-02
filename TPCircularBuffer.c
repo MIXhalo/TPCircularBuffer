@@ -82,7 +82,7 @@ bool _TPCircularBufferInit(TPCircularBuffer *buffer, int32_t length, size_t stru
                 return false;
             }
             // If this fails somehow, deallocate the whole region and try again
-            vm_deallocate(mach_task_self(), bufferAddress, buffer->length);
+            vm_deallocate(mach_task_self(), bufferAddress, buffer->length * 2);
             continue;
         }
         
