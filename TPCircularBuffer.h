@@ -153,13 +153,12 @@ static __inline__ __attribute__((always_inline)) void* TPCircularBufferTail(TPCi
 static __inline__ __attribute__((always_inline)) void TPCircularBufferConsume(TPCircularBuffer *buffer, int32_t amount) {
     buffer->tail = (buffer->tail + amount) % buffer->length;
     if ( buffer->atomic ) {
-        atomic_fetch_sub_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
+        int previousFillCount = atomic_fetch_sub_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
+        assert(previousFillCount - amount >= 0);
     } else {
         buffer->fillCount -= amount;
+        assert(buffer->fillCount >= 0);
     }
-    assert((buffer->atomic ?
-            atomic_load_explicit(&buffer->fillCount, memory_order_relaxed) :
-            buffer->fillCount) >= 0);
 }
 
 /*!
@@ -193,13 +192,12 @@ static __inline__ __attribute__((always_inline)) void* TPCircularBufferHead(TPCi
 static __inline__ __attribute__((always_inline)) void TPCircularBufferProduce(TPCircularBuffer *buffer, int32_t amount) {
     buffer->head = (buffer->head + amount) % buffer->length;
     if ( buffer->atomic ) {
-        atomic_fetch_add_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
+        int previousFillCount = atomic_fetch_add_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
+        assert(previousFillCount + amount <= buffer->length);
     } else {
         buffer->fillCount += amount;
+        assert(buffer->fillCount <= buffer->length);
     }
-    assert((buffer->atomic ?
-            atomic_load_explicit(&buffer->fillCount, memory_order_relaxed) :
-            buffer->fillCount) <= buffer->length);
 }
 
 /*!
