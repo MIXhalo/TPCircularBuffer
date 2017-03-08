@@ -64,7 +64,7 @@ typedef struct {
     int32_t           length;
     int32_t           tail;
     int32_t           head;
-    volatile atomic_int fillCount;
+    atomic_int fillCount;
     bool              atomic;
 } TPCircularBuffer;
 
@@ -135,7 +135,9 @@ void  TPCircularBufferSetAtomic(TPCircularBuffer *buffer, bool atomic);
  * @return Pointer to the first bytes ready for reading, or NULL if buffer is empty
  */
 static __inline__ __attribute__((always_inline)) void* TPCircularBufferTail(TPCircularBuffer *buffer, int32_t* availableBytes) {
-    *availableBytes = buffer->fillCount;
+    *availableBytes = (buffer->atomic ?
+                       atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
+                       buffer->fillCount);
     if ( *availableBytes == 0 ) return NULL;
     return (void*)((char*)buffer->buffer + buffer->tail);
 }
@@ -151,11 +153,12 @@ static __inline__ __attribute__((always_inline)) void* TPCircularBufferTail(TPCi
 static __inline__ __attribute__((always_inline)) void TPCircularBufferConsume(TPCircularBuffer *buffer, int32_t amount) {
     buffer->tail = (buffer->tail + amount) % buffer->length;
     if ( buffer->atomic ) {
-        atomic_fetch_add(&buffer->fillCount, -amount);
+        int previousFillCount = atomic_fetch_sub_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
+        assert(previousFillCount - amount >= 0);
     } else {
         buffer->fillCount -= amount;
+        assert(buffer->fillCount >= 0);
     }
-    assert(buffer->fillCount >= 0);
 }
 
 /*!
@@ -169,7 +172,9 @@ static __inline__ __attribute__((always_inline)) void TPCircularBufferConsume(TP
  * @return Pointer to the first bytes ready for writing, or NULL if buffer is full
  */
 static __inline__ __attribute__((always_inline)) void* TPCircularBufferHead(TPCircularBuffer *buffer, int32_t* availableBytes) {
-    *availableBytes = (buffer->length - buffer->fillCount);
+    *availableBytes = buffer->length - (buffer->atomic ?
+                                        atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
+                                        buffer->fillCount);
     if ( *availableBytes == 0 ) return NULL;
     return (void*)((char*)buffer->buffer + buffer->head);
 }
@@ -187,11 +192,12 @@ static __inline__ __attribute__((always_inline)) void* TPCircularBufferHead(TPCi
 static __inline__ __attribute__((always_inline)) void TPCircularBufferProduce(TPCircularBuffer *buffer, int32_t amount) {
     buffer->head = (buffer->head + amount) % buffer->length;
     if ( buffer->atomic ) {
-        atomic_fetch_add(&buffer->fillCount, amount);
+        int previousFillCount = atomic_fetch_add_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
+        assert(previousFillCount + amount <= buffer->length);
     } else {
         buffer->fillCount += amount;
+        assert(buffer->fillCount <= buffer->length);
     }
-    assert(buffer->fillCount <= buffer->length);
 }
 
 /*!
