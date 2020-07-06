@@ -131,7 +131,7 @@ void TPCircularBufferSetAtomic(TPCircularBuffer *buffer, bool atomic);
  * @param availableBytes On output, the number of bytes ready for reading
  * @return Pointer to the first bytes ready for reading, or NULL if buffer is empty
  */
-static __inline__ __attribute__((always_inline)) void *TPCircularBufferTail(TPCircularBuffer *buffer,
+static __inline__ __attribute__((always_inline)) void *TPCircularBufferTail(const TPCircularBuffer *buffer,
                                                                             int32_t *availableBytes) {
     *availableBytes = (buffer->atomic ?
                        atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
@@ -172,7 +172,7 @@ static __inline__ __attribute__((always_inline)) void TPCircularBufferConsume(TP
  * @param availableBytes On output, the number of bytes ready for writing
  * @return Pointer to the first bytes ready for writing, or NULL if buffer is full
  */
-static __inline__ __attribute__((always_inline)) void *TPCircularBufferHead(TPCircularBuffer *buffer,
+static __inline__ __attribute__((always_inline)) void *TPCircularBufferHead(const TPCircularBuffer *buffer,
                                                                             int32_t *availableBytes) {
     *availableBytes = buffer->length - (buffer->atomic ?
                                         atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
