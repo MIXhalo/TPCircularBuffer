@@ -188,17 +188,21 @@ static __inline__ __attribute__((always_inline)) void *TPCircularBufferHead(cons
  *
  * @param buffer Circular buffer
  * @param amount Number of bytes to produce
+ * @return Number of bytes ready for reading before the operation
  */
-static __inline__ __attribute__((always_inline)) void TPCircularBufferProduce(TPCircularBuffer *buffer,
+static __inline__ __attribute__((always_inline)) int TPCircularBufferProduce(TPCircularBuffer *buffer,
                                                                               int32_t amount) {
     buffer->head = (buffer->head + amount) % buffer->length;
+    int previousFillCount;
     if ( buffer->atomic ) {
-        int previousFillCount = atomic_fetch_add_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
-        assert(previousFillCount + amount <= buffer->length);
+        previousFillCount = atomic_fetch_add_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
     } else {
+        previousFillCount = buffer->fillCount;
         buffer->fillCount += amount;
-        assert(buffer->fillCount <= buffer->length);
     }
+    assert(previousFillCount + amount <= buffer->length);
+    
+    return previousFillCount;
 }
 
 /*!
