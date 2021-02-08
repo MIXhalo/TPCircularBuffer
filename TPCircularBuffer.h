@@ -133,9 +133,11 @@ void TPCircularBufferSetAtomic(TPCircularBuffer *buffer, bool atomic);
  */
 static __inline__ __attribute__((always_inline)) void *TPCircularBufferTail(const TPCircularBuffer *buffer,
                                                                             int32_t *availableBytes) {
-    *availableBytes = (buffer->atomic ?
-                       atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
-                       buffer->fillCount);
+    int fillCount = (buffer->atomic ?
+                     atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
+                     buffer->fillCount);
+    *availableBytes = (fillCount <= 0 ? 0 : fillCount);
+
     if ( *availableBytes == 0 ) return NULL;
     return (void *)((char *)buffer->buffer + buffer->tail);
 }
@@ -152,11 +154,9 @@ static __inline__ __attribute__((always_inline)) void TPCircularBufferConsume(TP
                                                                               int32_t amount) {
     buffer->tail = (buffer->tail + amount) % buffer->length;
     if ( buffer->atomic ) {
-        int previousFillCount = atomic_fetch_sub_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
-        assert(previousFillCount - amount >= 0);
+        atomic_fetch_sub_explicit(&buffer->fillCount, amount, memory_order_acq_rel);
     } else {
         buffer->fillCount -= amount;
-        assert(buffer->fillCount >= 0);
     }
 }
 
@@ -170,13 +170,23 @@ static __inline__ __attribute__((always_inline)) void TPCircularBufferConsume(TP
  *
  * @param buffer Circular buffer
  * @param availableBytes On output, the number of bytes ready for writing
+ * @param discardBytes On output, the number of bytes to discard before writing
  * @return Pointer to the first bytes ready for writing, or NULL if buffer is full
  */
 static __inline__ __attribute__((always_inline)) void *TPCircularBufferHead(const TPCircularBuffer *buffer,
-                                                                            int32_t *availableBytes) {
-    *availableBytes = buffer->length - (buffer->atomic ?
-                                        atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
-                                        buffer->fillCount);
+                                                                            int32_t *availableBytes,
+                                                                            int32_t *discardBytes) {
+    int fillCount = (buffer->atomic ?
+                     atomic_load_explicit(&buffer->fillCount, memory_order_acquire) :
+                     buffer->fillCount);
+    if (fillCount <= 0) {
+        *availableBytes = buffer->length;
+        *discardBytes = -fillCount;
+    } else {
+        *availableBytes = buffer->length - fillCount;
+        *discardBytes = 0;
+    }
+
     if ( *availableBytes == 0 ) return NULL;
     return (void *)((char *)buffer->buffer + buffer->head);
 }
@@ -218,10 +228,10 @@ static __inline__ __attribute__((always_inline)) int TPCircularBufferProduce(TPC
 static __inline__ __attribute__((always_inline)) bool TPCircularBufferProduceBytes(TPCircularBuffer *buffer,
                                                                                    const void *src,
                                                                                    int32_t len) {
-    int32_t space;
-    void *ptr = TPCircularBufferHead(buffer, &space);
-    if ( space < len ) return false;
-    memcpy(ptr, src, len);
+    int32_t space, discard;
+    void *ptr = TPCircularBufferHead(buffer, &space, &discard);
+    if ( space < len - discard ) return false;
+    memcpy(ptr + discard, src + discard, len - discard);
     TPCircularBufferProduce(buffer, len);
     return true;
 }
@@ -236,7 +246,6 @@ __deprecated_msg("use TPCircularBufferSetAtomic(false) and TPCircularBufferConsu
 void TPCircularBufferConsumeNoBarrier(TPCircularBuffer *buffer, int32_t amount) {
     buffer->tail = (buffer->tail + amount) % buffer->length;
     buffer->fillCount -= amount;
-    assert(buffer->fillCount >= 0);
 }
 
 /*!
